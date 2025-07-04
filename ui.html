@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body { font-family: sans-serif; padding: 1rem; }
+    h1 { font-size: 1rem; }
+    h2 { font-size: 0.8rem; }
+    ul { list-style: none; padding: 0; }
+    li { padding: 0.5rem; cursor: pointer; border-radius: 4px; }
+    li:hover { background-color: #f0f0f0; }
+    .selected { background-color: #e6e6e6; }
+    .styles-container { margin-top: 1rem; }
+    .style-item { display: flex; justify-content: space-between; align-items: center; }
+    .locate-button {
+      padding: 0.25rem 0.5rem;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    .color-preview {
+      width: 20px;
+      height: 20px;
+      border-radius: 3px;
+      border: 1px solid #ddd;
+      margin-right: 8px;
+      flex-shrink: 0;
+    }
+    .hidden {
+      display: none;
+    }
+    .library-section {
+      margin-bottom: 1rem;
+    }
+    .library-section h3 {
+      margin: 0.5rem 0;
+      font-size: 0.9rem;
+      color: #666;
+    }
+    .style-name strong {
+      color: #d73502;
+    }
+    .style-name em {
+      color: #999;
+      font-style: italic;
+      font-size: 0.85em;
+    }
+    #detached-colors-container .style-item:hover {
+      background-color: #fff3e0;
+    }
+    
+    #scan-button-container {
+      text-align: center;
+      padding: 2rem;
+    }
+    
+    #scan-document-btn {
+      background-color: #18a0fb;
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 500;
+      margin-top: 1rem;
+    }
+    
+    #scan-document-btn:hover {
+      background-color: #1394e6;
+    }
+  </style>
+</head>
+<body>
+  <div id="scan-button-container">
+    <h1>Style Scout: Your Figma style tracker</h1>
+    <p>Click the button below to scan your document for external library styles and loose colors.</p>
+    <button id="scan-document-btn" onclick="scanDocument()">Scan Document</button>
+  </div>
+
+  <div id="loading-indicator" style="display: none;">
+    <h2>Scanning Document</h2>
+    <p>Analyzing external library styles and loose colors...</p>
+    <p>This may take a moment on large files.</p>
+  </div>
+
+  <div id="main-content" style="display: none;">
+    <h1>Styles found in your document:</h1>
+    <ul id="library-list"></ul>
+
+    <div id="styles-container" class="styles-container">
+      <h2 id="styles-header"></h2>
+      <ul id="style-list"></ul>
+    </div>
+  </div>
+
+  <div id="no-styles" class="hidden">
+    <p>No external library styles found in this file.</p>
+  </div>
+
+  <script>
+    const scanButtonContainer = document.getElementById('scan-button-container');
+    const loadingIndicator = document.getElementById('loading-indicator');
+    const mainContent = document.getElementById('main-content');
+    const libraryList = document.getElementById('library-list');
+    const stylesContainer = document.getElementById('styles-container');
+    const stylesHeader = document.getElementById('styles-header');
+    const styleList = document.getElementById('style-list');
+
+    let libraries = {};
+    let selectedLibrary = null;
+
+    function scanDocument() {
+      // IMMEDIATELY hide scan button and show loading
+      scanButtonContainer.style.display = 'none';
+      loadingIndicator.style.display = 'block';
+      
+      // Give the UI time to update BEFORE starting heavy processing
+      setTimeout(() => {
+        // Send message to start scanning
+        parent.postMessage({ pluginMessage: { type: 'SCAN_DOCUMENT' } }, '*');
+      }, 10);
+    }
+
+    window.onmessage = async (event) => {
+      console.log('Message received from code.ts:', event.data.pluginMessage);
+      const { type, payload } = event.data.pluginMessage;
+
+      if (type === 'FULL_RESULT') {
+        // Hide loading indicator and show main content
+        loadingIndicator.style.display = 'none';
+        mainContent.style.display = 'block';
+        
+        const { libraries: librariesData } = payload;
+        libraries = librariesData; // Update global libraries variable
+
+        // Update library list in sidebar
+        libraryList.innerHTML = '';
+        Object.keys(librariesData).forEach(libraryName => {
+          const li = document.createElement('li');
+          li.textContent = `${libraryName} (${librariesData[libraryName].total})`;
+          li.onclick = () => {
+            selectedLibrary = libraryName;
+            displayStyles(libraryName);
+            // Highlight selected
+            Array.from(libraryList.children).forEach(child => child.classList.remove('selected'));
+            li.classList.add('selected');
+          };
+          libraryList.appendChild(li);
+        });
+
+        // Check if we have any libraries
+        if (Object.keys(librariesData).length === 0) {
+          document.getElementById('no-styles').classList.remove('hidden');
+        }
+      }
+    };
+
+    function displayStyles(libraryName) {
+      const styles = libraries[libraryName].styles;
+      stylesHeader.textContent = `Styles from ${libraryName}`;
+      styleList.innerHTML = '';
+      stylesContainer.style.display = 'block';
+
+      styles.forEach(style => {
+        const li = document.createElement('li');
+        li.className = 'style-item';
+
+        // Handle loose colors differently
+        if (style.type === 'LOOSE_COLOR') {
+          // Add color preview for loose colors
+          const colorPreview = document.createElement('div');
+          colorPreview.className = 'color-preview';
+          colorPreview.style.backgroundColor = style.hex;
+          colorPreview.style.opacity = style.opacity;
+          colorPreview.style.display = 'inline-block';
+          colorPreview.style.width = '16px';
+          colorPreview.style.height = '16px';
+          colorPreview.style.marginRight = '8px';
+          colorPreview.style.borderRadius = '2px';
+          colorPreview.style.verticalAlign = 'middle';
+          li.appendChild(colorPreview);
+        }
+
+        const styleName = document.createElement('span');
+        styleName.textContent = `${style.name} (${style.count})`;
+        li.appendChild(styleName);
+
+        const locateButton = document.createElement('button');
+        locateButton.className = 'locate-button';
+        locateButton.textContent = 'Locate';
+        locateButton.onclick = () => {
+          // IMMEDIATELY show loading state
+          locateButton.textContent = 'Locating...';
+          locateButton.disabled = true;
+          locateButton.style.backgroundColor = '#ccc';
+          
+          // Give the UI time to update BEFORE starting heavy processing
+          setTimeout(() => {
+            if (style.type === 'LOOSE_COLOR') {
+              parent.postMessage({ pluginMessage: { type: 'LOCATE_LOOSE_COLOR', payload: { hex: style.hex, opacity: style.opacity } } }, '*');
+            } else {
+              parent.postMessage({ pluginMessage: { type: 'LOCATE_STYLE', payload: { styleId: style.id } } }, '*');
+            }
+            
+            // Reset button after a delay
+            setTimeout(() => {
+              locateButton.textContent = 'Locate';
+              locateButton.disabled = false;
+              locateButton.style.backgroundColor = '';
+            }, 2000);
+          }, 10);
+        };
+        li.appendChild(locateButton);
+        styleList.appendChild(li);
+      });
+    }
+
+
+  </script>
+</body>
+</html> 

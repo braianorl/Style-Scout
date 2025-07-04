@@ -1,0 +1,16 @@
+{
+  "name": "figma-style-scout",
+  "version": "1.0.0",
+  "description": "Style Scout: Your Figma style tracker for external libraries and loose colors.",
+  "main": "code.js",
+  "scripts": {
+    "build": "esbuild code.ts --bundle --outfile=code.js --target=es6",
+    "watch": "esbuild code.ts --bundle --outfile=code.js --watch --target=es6"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@figma/plugin-typings": "^1.42.1",
+    "esbuild": "^0.14.25"
+  }
+} 
